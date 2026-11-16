@@ -82,8 +82,7 @@ go vet ./... && go test -race ./...
 scripts/build.sh 0.1.0        # builds every platform into dist/ with SHA256SUMS
 ```
 
-The CLI is built on [commypanel-go](https://github.com/commypanel/commypanel-go). While that library is not
-yet published, build both from a `go.work` file in their common folder (`use ./commypanel-go ./commy-cli`).
-Once it is tagged, run `go mod tidy` here to write `go.sum`.
+The CLI is built on [commypanel-go](https://github.com/commypanel/commypanel-go). To work on both at once, put the two
+repositories in one folder and add a `go.work` file there (`use ./commypanel-go ./commy-cli`).
 
 MIT licensed.
