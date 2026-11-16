@@ -1,0 +1,6 @@
+/dist/
+/commy
+*.test
+*.out
+.idea/
+.vscode/
