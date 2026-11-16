@@ -568,3 +568,16 @@ func TestSafeText(t *testing.T) {
 		}
 	}
 }
+
+func TestAServerThatEchoesTheTokenNeverGetsItOntoTheTerminal(t *testing.T) {
+	echo := "Invalid header: Authorization: Bearer " + secret
+	f := newFake(t, map[string]func(int) (int, string){
+		"POST /api/v1/apps/shop/stop": always(409, `{"error":"`+echo+`","errors":{"x":["`+echo+`"]}}`),
+	})
+
+	r := run(t, withToken(f, nil), "stop", "shop")
+
+	if r.code != ExitError || strings.Contains(r.out+r.errout, "topsecret") {
+		t.Errorf("%+v", r)
+	}
+}
