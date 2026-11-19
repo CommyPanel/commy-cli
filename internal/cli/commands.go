@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -24,7 +25,7 @@ func one(positional []string, what string) (string, error) {
 }
 
 func (a *app) login(args []string) error {
-	fs, c := a.flags("login", "login --url <address> [--ca-file file]   (the token comes from $"+envToken+")")
+	fs, c := a.flags("login", "login [--url <address>] [--ca-file file]   (the token is asked for, or comes from $"+envToken+" or a pipe)")
 	c.register(fs, false)
 
 	pos, err := parse(fs, args)
@@ -36,14 +37,24 @@ func (a *app) login(args []string) error {
 		return usagef("login takes no arguments")
 	}
 
-	token := a.env.Getenv(envToken)
-	if token == "" {
-		return usagef("set %s to the token first, so it never appears in a command line or the shell history, for example:\n  read -rs %s; export %s\n  commy login --url https://panel.example.com", envToken, envToken, envToken)
-	}
-
 	url := firstNonEmpty(c.url, a.env.Getenv(envURL))
 	if url == "" {
-		return usagef("give the panel address: commy login --url https://panel.example.com")
+		if !a.env.interactive() {
+			return usagef("give the panel address: commy login --url https://panel.example.com")
+		}
+
+		if url, err = a.prompt("Panel address (https://...): "); err != nil {
+			return err
+		}
+
+		if url == "" {
+			return usagef("no panel address given")
+		}
+	}
+
+	token, err := a.loginToken()
+	if err != nil {
+		return err
 	}
 
 	client, err := a.newClient(settings{url: url, token: token, caFile: c.caFile}, c)
@@ -692,4 +703,53 @@ func (a *app) envUnset(args []string) error {
 	fmt.Fprintln(a.out())
 
 	return nil
+}
+
+// loginToken finds the token without ever taking it from the command line: $COMMY_TOKEN, else typed hidden
+// at a terminal, else the first line of a pipe.
+func (a *app) loginToken() (string, error) {
+	if token := a.env.Getenv(envToken); token != "" {
+		return token, nil
+	}
+
+	var token string
+
+	if a.env.interactive() {
+		fmt.Fprint(a.err(), "API token (typing is hidden): ")
+
+		secret, err := a.env.readSecret()
+
+		fmt.Fprintln(a.err())
+
+		if err != nil {
+			return "", fmt.Errorf("reading the token: %w", err)
+		}
+
+		token = secret
+	} else {
+		line, err := bufio.NewReader(io.LimitReader(a.env.Stdin, 4096)).ReadString('\n')
+		if err != nil && !errors.Is(err, io.EOF) {
+			return "", fmt.Errorf("reading the token: %w", err)
+		}
+
+		token = line
+	}
+
+	if token = strings.TrimSpace(token); token == "" {
+		return "", usagef("no token given: run commy login at a terminal and type it, pipe it in, or set %s. Make one in the panel under Settings > API tokens", envToken)
+	}
+
+	return token, nil
+}
+
+// prompt asks one visible question on the terminal and reads one line.
+func (a *app) prompt(question string) (string, error) {
+	fmt.Fprint(a.err(), question)
+
+	line, err := bufio.NewReader(io.LimitReader(a.env.Stdin, 4096)).ReadString('\n')
+	if err != nil && !errors.Is(err, io.EOF) {
+		return "", err
+	}
+
+	return strings.TrimSpace(line), nil
 }

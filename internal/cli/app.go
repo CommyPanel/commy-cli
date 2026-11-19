@@ -8,12 +8,14 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/signal"
 	"sort"
 	"strings"
 
 	commypanel "github.com/commypanel/commypanel-go"
+	"golang.org/x/term"
 )
 
 // Exit codes. Scripts can tell a deployment that failed from a command that could not run.
@@ -38,6 +40,24 @@ type Environment struct {
 
 	// StdinIsTerminal says whether input comes from a person typing. Nil means "look at os.Stdin".
 	StdinIsTerminal func() bool
+
+	// ReadSecret reads one line typed without being shown. Nil means "ask the terminal".
+	ReadSecret func() (string, error)
+
+	// The rest is for the update command. Nil or empty means the real thing.
+	HTTPClient *http.Client
+	UpdateBase string
+	Executable func() (string, error)
+}
+
+func (e Environment) readSecret() (string, error) {
+	if e.ReadSecret != nil {
+		return e.ReadSecret()
+	}
+
+	raw, err := term.ReadPassword(int(os.Stdin.Fd()))
+
+	return string(raw), err
 }
 
 func (e Environment) interactive() bool {
@@ -134,6 +154,8 @@ func (a *app) dispatch(args []string) error {
 		return a.login(rest)
 	case "logout":
 		return a.logout(rest)
+	case "update":
+		return a.update(rest)
 	case "whoami":
 		return a.whoami(rest)
 	case "apps":
@@ -355,7 +377,7 @@ func (a *app) help() {
 
 Usage: commy <command> [arguments]
 
-  login --url <address>      save the panel address and a token (the token comes from $COMMY_TOKEN)
+  login [--url <address>]    sign in: asks for the address and the token (typed hidden), checks it, saves it
   logout                     forget the saved login
   whoami                     what the token is and may do
   apps [list|show <app>]     list apps, or show one
@@ -368,10 +390,11 @@ Usage: commy <command> [arguments]
   env list <app>             the names of its variables (values are never shown)
   env set <app> <KEY>        set a variable; the value is read from stdin (or --from-file)
   env unset <app> <KEY>      remove a variable
+  update                     look for a newer commy and install it   (--check, --yes)
   version
 
 Every command accepts --url, --ca-file and --allow-http-localhost; most accept --json.
-The token is never taken as an argument: set $COMMY_TOKEN or use "commy login".
+The token is never taken as an argument: use "commy login" or set $COMMY_TOKEN.
 Exit codes: 0 ok, 1 error, 2 usage, 3 a deployment failed or was rolled back, 4 still running when --timeout ended.
 `)
 }

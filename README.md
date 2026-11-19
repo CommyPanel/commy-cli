@@ -23,12 +23,16 @@ Make a token in the panel under **Settings > API tokens**: give it only the abil
 the apps you need, and let it expire. Then:
 
 ```bash
-read -rs COMMY_TOKEN && export COMMY_TOKEN     # type or paste the token; it is not shown or kept in history
-commy login --url https://panel.example.com
+commy login
 ```
 
-`login` checks the token and saves the address and token in `commy/config.json` in your config folder,
-readable only by you. In CI, skip `login` and set `COMMY_URL` and `COMMY_TOKEN` from your secrets.
+It asks for the panel address and then for the token, which is typed **hidden** (nothing is shown or kept in
+the shell history). `login` checks the token with the panel first: if it is wrong, revoked or expired it says
+so and saves nothing. A good one is saved, with the address, in `commy/config.json` in your config folder,
+readable only by you. You can also give the address up front (`commy login --url https://panel.example.com`)
+or pipe the token in (`printf %s "$TOKEN" | commy login --url ...`).
+
+In CI, skip `login` and set `COMMY_URL` and `COMMY_TOKEN` from your secrets. A script never gets a prompt.
 
 The token is **never** taken as a command-line argument (it would end up in the process list and the shell
 history), and a saved token is only ever sent to the address it was saved with.
@@ -47,6 +51,7 @@ history), and a saved token is only ever sent to the address it was saved with.
 | `commy env list <app>` | the names of its variables (values are never shown) | `apps:env` |
 | `commy env set <app> <KEY>` | set a variable; the value is read from stdin or `--from-file` | `apps:env` |
 | `commy env unset <app> <KEY>` | remove a variable | `apps:env` |
+| `commy update` | look for a newer commy and install it after a yes (`--check` only looks, `--yes` skips the question) | none |
 | `commy logout` | forget the saved login | none |
 
 ```bash
@@ -65,13 +70,19 @@ when `--timeout` ended (it carries on in the panel).
 
 - **https only**, and TLS is always verified; there is no "skip verification" switch.
 - **Redirects are not followed**, so the token cannot be sent to another address.
-- **No secrets on the command line**: the token comes from `$COMMY_TOKEN` or the saved login, variable values
+- **No secrets on the command line**: the token is typed hidden, piped in, or comes from `$COMMY_TOKEN` or the saved login, variable values
   from stdin or a file. Asking for them in a terminal is refused rather than shown.
 - **The config file** is created readable only by you, and a copy that others can read is refused.
 - **Output is cleaned.** App logs, commit messages and error text are not under your control, so terminal
   control characters in them (which can retitle a window, hide text or write to the clipboard) are shown
   as `�` instead of reaching the terminal.
-- No telemetry and no self-update.
+- **Updating is your choice.** `commy update` is the only time commy calls out on its own, and only when you
+  run it. It asks GitHub for the latest release, downloads the file for your system over https (redirects
+  stay on GitHub's hosts), compares its SHA-256 with the release's `SHA256SUMS`, and only then swaps it in;
+  a failed check leaves the old program untouched. The checksums come from the same release, so this guards
+  against damage and wrong files, not against a compromised release. Nothing is sent but the usual request
+  details and `commy/<version>`, and your token is never part of it.
+- No telemetry.
 
 Report a vulnerability privately, as described in [SECURITY.md](SECURITY.md).
 
